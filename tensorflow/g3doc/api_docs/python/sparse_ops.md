@@ -105,6 +105,13 @@ The non-zero values in the represented dense tensor.
 
 - - -
 
+#### `tf.SparseTensor.shape` {#SparseTensor.shape}
+
+A 1-D Tensor of int64 representing the shape of the dense tensor.
+
+
+- - -
+
 #### `tf.SparseTensor.dtype` {#SparseTensor.dtype}
 
 The `DType` of elements in this tensor.
@@ -112,9 +119,9 @@ The `DType` of elements in this tensor.
 
 - - -
 
-#### `tf.SparseTensor.shape` {#SparseTensor.shape}
+#### `tf.SparseTensor.op` {#SparseTensor.op}
 
-A 1-D Tensor of int64 representing the shape of the dense tensor.
+The `Operation` that produces `values` as an output.
 
 
 - - -
@@ -569,6 +576,60 @@ then the output will be a `SparseTensor` of shape `[4, 5]` and
 
 - - -
 
+### `tf.sparse_reshape(sp_input, shape, name=None)` {#sparse_reshape}
+
+Reshapes a `SparseTensor` to represent values in a new dense shape.
+
+This operation has the same semantics as `reshape` on the represented dense
+tensor.  The indices of non-empty values in `sp_input` are recomputed based
+on the new dense shape, and a new `SparseTensor` is returned containing the
+new indices and new shape.  The order of non-empty values in `sp_input` is
+unchanged.
+
+If one component of `shape` is the special value -1, the size of that
+dimension is computed so that the total dense size remains constant.  At
+most one component of `shape` can be -1.  The number of dense elements
+implied by `shape` must be the same as the number of dense elements
+originally represented by `sp_input`.
+
+For example, if `sp_input` has shape `[2, 3, 6]` and `indices` / `values`:
+
+    [0, 0, 0]: a
+    [0, 0, 1]: b
+    [0, 1, 0]: c
+    [1, 0, 0]: d
+    [1, 2, 3]: e
+
+and `shape` is `[9, -1]`, then the output will be a `SparseTensor` of
+shape `[9, 4]` and `indices` / `values`:
+
+    [0, 0]: a
+    [0, 1]: b
+    [1, 2]: c
+    [4, 2]: d
+    [8, 1]: e
+
+##### Args:
+
+
+*  <b>`sp_input`</b>: The input `SparseTensor`.
+*  <b>`shape`</b>: A 1-D (vector) int64 `Tensor` specifying the new dense shape of the
+    represented `SparseTensor`.
+*  <b>`name`</b>: A name prefix for the returned tensors (optional)
+
+##### Returns:
+
+  A `SparseTensor` with the same non-empty values but with indices calculated
+  by the new dense shape.
+
+##### Raises:
+
+
+*  <b>`TypeError`</b>: If `sp_input` is not a `SparseTensor`.
+
+
+- - -
+
 ### `tf.sparse_split(split_dim, num_split, sp_input, name=None)` {#sparse_split}
 
 Split a `SparseTensor` into `num_split` tensors along `split_dim`.
@@ -767,6 +828,53 @@ This op also returns an indicator vector such that
 
 
 
+## Reduction
+- - -
+
+### `tf.sparse_reduce_sum(sp_input, reduction_axes=None, keep_dims=False)` {#sparse_reduce_sum}
+
+Computes the sum of elements across dimensions of a SparseTensor.
+
+This Op takes a SparseTensor and is the sparse counterpart to
+`tf.reduce_sum()`.  In particular, this Op also returns a dense `Tensor`
+instead of a sparse one.
+
+Reduces `sp_input` along the dimensions given in `reduction_axes`.  Unless
+`keep_dims` is true, the rank of the tensor is reduced by 1 for each entry in
+`reduction_axes`. If `keep_dims` is true, the reduced dimensions are retained
+with length 1.
+
+If `reduction_axes` has no entries, all dimensions are reduced, and a tensor
+with a single element is returned.  Additionally, the axes can be negative,
+similar to the indexing rules in Python.
+
+For example:
+
+```python
+# 'x' represents [[1, ?, 1]
+#                 [?, 1, ?]]
+# where ? is implictly-zero.
+tf.sparse_reduce_sum(x) ==> 3
+tf.sparse_reduce_sum(x, 0) ==> [1, 1, 1]
+tf.sparse_reduce_sum(x, 1) ==> [2, 1]  # Can also use -1 as the axis.
+tf.sparse_reduce_sum(x, 1, keep_dims=True) ==> [[2], [1]]
+tf.sparse_reduce_sum(x, [0, 1]) ==> 3
+```
+
+##### Args:
+
+
+*  <b>`sp_input`</b>: The SparseTensor to reduce. Should have numeric type.
+*  <b>`reduction_axes`</b>: The dimensions to reduce; list or scalar. If `None` (the
+    default), reduces all dimensions.
+*  <b>`keep_dims`</b>: If true, retain reduced dimensions with length 1.
+
+##### Returns:
+
+  The reduced Tensor.
+
+
+
 ## Math Operations
 - - -
 
@@ -850,6 +958,7 @@ Hence, the `SparseTensor` result has exactly the same non-zero indices and
 shape.
 
 Example:
+
 ```python
 # First batch:
 # [?   e.]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,8 +61,9 @@ function main() {
 
   # protobuf pip package doesn't ship with header files. Copy the headers
   # over so user defined ops can be compiled.
+  mkdir -p ${TMPDIR}/google
   rsync --include "*/" --include "*.h" --exclude "*" --prune-empty-dirs -a \
-    $RUNFILES/google ${TMPDIR}
+    $RUNFILES/external/protobuf ${TMPDIR}/google
   rsync -a $RUNFILES/third_party/eigen3 ${TMPDIR}/third_party
 
   cp tensorflow/tools/pip_package/MANIFEST.in ${TMPDIR}

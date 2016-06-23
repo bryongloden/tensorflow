@@ -55,9 +55,20 @@ cuda_py_tests(
 )
 
 cuda_py_tests(
-    name = "gaussian_test",
+    name = "normal_test",
     size = "small",
-    srcs = ["python/kernel_tests/gaussian_test.py"],
+    srcs = ["python/kernel_tests/normal_test.py"],
+    additional_deps = [
+        ":distributions_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python:platform_test",
+    ],
+)
+
+cuda_py_tests(
+    name = "kullback_leibler_test",
+    size = "small",
+    srcs = ["python/kernel_tests/kullback_leibler_test.py"],
     additional_deps = [
         ":distributions_py",
         "//tensorflow/python:framework_test_lib",
@@ -87,6 +98,16 @@ cuda_py_tests(
 )
 
 cuda_py_tests(
+    name = "categorical_test",
+    size = "small",
+    srcs = ["python/kernel_tests/categorical_test.py"],
+    additional_deps = [
+        ":distributions_py",
+        "//tensorflow/python:platform_test",
+    ],
+)
+
+cuda_py_tests(
     name = "mvn_test",
     size = "small",
     srcs = ["python/kernel_tests/mvn_test.py"],
@@ -98,9 +119,9 @@ cuda_py_tests(
 )
 
 cuda_py_tests(
-    name = "gaussian_conjugate_posteriors_test",
+    name = "normal_conjugate_posteriors_test",
     size = "small",
-    srcs = ["python/kernel_tests/gaussian_conjugate_posteriors_test.py"],
+    srcs = ["python/kernel_tests/normal_conjugate_posteriors_test.py"],
     additional_deps = [
         ":distributions_py",
         "//tensorflow/python:platform_test",

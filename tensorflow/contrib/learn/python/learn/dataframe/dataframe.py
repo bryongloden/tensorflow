@@ -1,5 +1,4 @@
-"""A DataFrame is a container for ingesting and preprocessing data."""
-# Copyright 2016 Google Inc. All Rights Reserved.
+# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# ==============================================================================
+
+"""A DataFrame is a container for ingesting and preprocessing data."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -20,7 +22,7 @@ from __future__ import print_function
 from abc import ABCMeta
 import collections
 
-from .column import Column
+from .series import Series
 from .transform import Transform
 
 
@@ -59,7 +61,7 @@ class DataFrame(object):
       if not isinstance(k, str):
         raise TypeError("The only supported type for keys is string; got %s" %
                         type(k))
-      if isinstance(v, Column):
+      if isinstance(v, Series):
         s = v
       elif isinstance(v, Transform) and v.input_valency() == 0:
         s = v()
@@ -71,7 +73,7 @@ class DataFrame(object):
       #   s = series.NumpySeries(v)
       else:
         raise TypeError(
-            "Column in assignment must be an inflow.Column, pandas.Series or a"
+            "Column in assignment must be an inflow.Series, pandas.Series or a"
             " numpy array; got type '%s'." % type(v).__name__)
       self._columns[k] = s
 
@@ -113,7 +115,7 @@ class DataFrame(object):
   def __setitem__(self, key, value):
     if isinstance(key, str):
       key = [key]
-    if isinstance(value, Column):
+    if isinstance(value, Series):
       value = [value]
     self.assign(**dict(zip(key, value)))
 
@@ -145,10 +147,7 @@ class DataFrame(object):
       target_keys = []
 
     if feature_keys is None:
-      if target_keys:
-        feature_keys = self.columns() - set(target_keys)
-      else:
-        feature_keys = self.columns()
+      feature_keys = self.columns() - set(target_keys)
     else:
       in_both = set(feature_keys) & set(target_keys)
       if in_both:

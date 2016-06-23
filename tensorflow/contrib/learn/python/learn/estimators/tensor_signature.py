@@ -1,16 +1,18 @@
-#  Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#   http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """TensorSignature class and utilities."""
 
 from __future__ import absolute_import
@@ -19,9 +21,12 @@ from __future__ import print_function
 
 import collections
 
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import parsing_ops
 
 
 class TensorSignature(collections.namedtuple(
@@ -65,7 +70,19 @@ class TensorSignature(collections.namedtuple(
   def get_placeholder(self):
     if self.is_sparse:
       return array_ops.sparse_placeholder(dtype=self.dtype)
-    return array_ops.placeholder(dtype=self.dtype, shape=self.shape)
+    return array_ops.placeholder(dtype=self.dtype,
+                                 shape=[None] + list(self.shape[1:]))
+
+  def get_feature_spec(self):
+    dtype = self.dtype
+    # Convert, because example parser only supports float32, int64 and string.
+    if dtype == dtypes.int32:
+      dtype = dtypes.int64
+    if dtype == dtypes.float64:
+      dtype = dtypes.float32
+    if self.is_sparse:
+      return parsing_ops.VarLenFeature(dtype=dtype)
+    return parsing_ops.FixedLenFeature(shape=self.shape[1:], dtype=dtype)
 
 
 def tensors_compatible(tensors, signatures):
@@ -125,3 +142,35 @@ def create_placeholders_from_signatures(signatures):
   return {
       key: signatures[key].get_placeholder()
       for key in signatures}
+
+
+def create_example_parser_from_signatures(signatures, examples_batch,
+                                          single_feature_name="feature"):
+  """Creates example parser from given signatures.
+
+  Args:
+    signatures: Dict of `TensorSignature` objects or single `TensorSignature`.
+    examples_batch: string `Tensor` of serialized `Example` proto.
+    single_feature_name: string, single feature name.
+
+  Returns:
+    features: `Tensor` or `dict` of `Tensor` objects.
+  """
+  feature_spec = {}
+  if not isinstance(signatures, dict):
+    feature_spec[single_feature_name] = signatures.get_feature_spec()
+  else:
+    feature_spec = {key: signatures[key].get_feature_spec()
+                    for key in signatures}
+  features = parsing_ops.parse_example(examples_batch, feature_spec)
+  if not isinstance(signatures, dict):
+    # Returns single feature, casts if needed.
+    features = features[single_feature_name]
+    if not signatures.dtype.is_compatible_with(features.dtype):
+      features = math_ops.cast(features, signatures.dtype)
+    return features
+  # Returns dict of features, casts if needed.
+  for name in features:
+    if not signatures[name].dtype.is_compatible_with(features[name].dtype):
+      features[name] = math_ops.cast(features[name], signatures[name].dtype)
+  return features

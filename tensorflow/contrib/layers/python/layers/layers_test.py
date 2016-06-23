@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,6 +23,64 @@ import tensorflow as tf
 
 # TODO(sguada) Expose tf.with_dependencies
 from tensorflow.python.ops import control_flow_ops
+
+
+class AvgPool2DTest(tf.test.TestCase):
+
+  def testCreateAvgPool(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.avg_pool2d(images, [3, 3])
+      self.assertEquals(output.op.name, 'AvgPool2D/AvgPool')
+      self.assertListEqual(output.get_shape().as_list(), [5, 1, 1, 3])
+
+  def testCollectOutputs(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.avg_pool2d(images, [3, 3],
+                                            outputs_collections='outputs')
+      self.assertEquals(('AvgPool2D', output),
+                        tf.get_collection('outputs')[0])
+
+  def testCreateSquareAvgPool(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.avg_pool2d(images, 3)
+      self.assertEquals(output.op.name, 'AvgPool2D/AvgPool')
+      self.assertListEqual(output.get_shape().as_list(), [5, 1, 1, 3])
+
+  def testCreateAvgPoolWithScope(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.avg_pool2d(images, [3, 3], scope='pool1')
+      self.assertEquals(output.op.name, 'pool1/AvgPool')
+
+  def testCreateAvgPoolSAME(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.avg_pool2d(images, [3, 3], padding='SAME')
+      self.assertListEqual(output.get_shape().as_list(), [5, 2, 2, 3])
+
+  def testCreateAvgPoolStrideSAME(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.avg_pool2d(images, [3, 3], stride=1,
+                                            padding='SAME')
+      self.assertListEqual(output.get_shape().as_list(), [5, height, width, 3])
+
+  def testGlobalAvgPool(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.avg_pool2d(images, images.get_shape()[1:3],
+                                            stride=1)
+      self.assertListEqual(output.get_shape().as_list(), [5, 1, 1, 3])
 
 
 class BiasAddTest(tf.test.TestCase):
@@ -262,19 +320,149 @@ class Convolution2dTest(tf.test.TestCase):
           len(tf.contrib.framework.get_variables('Conv_1/BatchNorm')), 0)
 
 
+class DropoutTest(tf.test.TestCase):
+
+  def testCreateDropout(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.dropout(images)
+      self.assertEquals(output.op.name, 'Dropout/dropout/mul_1')
+      output.get_shape().assert_is_compatible_with(images.get_shape())
+
+  def testCreateDropoutWithConstant(self):
+    height, width = 3, 3
+    with self.test_session():
+      is_training = tf.constant(False)
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.dropout(images, is_training=is_training)
+      self.assertEquals(output.op.name, 'Dropout/dropout/mul_1')
+      output.get_shape().assert_is_compatible_with(images.get_shape())
+
+  def testCreateDropoutWithPlaceholder(self):
+    height, width = 3, 3
+    with self.test_session():
+      is_training = tf.placeholder(dtype=tf.bool, shape=[])
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.dropout(images, is_training=is_training)
+      self.assertEquals(output.op.name, 'Dropout/cond/Merge')
+      output.get_shape().assert_is_compatible_with(images.get_shape())
+
+  def testCollectOutputs(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.dropout(images, outputs_collections='outputs')
+      self.assertEquals(('Dropout', output),
+                        tf.get_collection('outputs')[0])
+
+  def testDropout(self):
+    height, width = 10, 10
+    with self.test_session() as sess:
+      images = tf.random_uniform((5, height, width, 3), seed=1, name='images')
+      num_elem_initial = tf.reduce_mean(tf.to_float(images > 0))
+      output = tf.contrib.layers.dropout(images)
+      num_elem = tf.reduce_mean(tf.to_float(output > 0))
+      sess.run(tf.initialize_all_variables())
+      num_elem, num_elem_initial = sess.run([num_elem, num_elem_initial])
+      self.assertLess(num_elem, num_elem_initial/2 + 0.1)
+      self.assertGreater(num_elem, num_elem_initial/2 - 0.1)
+
+  def testCreateDropoutNoTraining(self):
+    height, width = 3, 3
+    with self.test_session() as sess:
+      images = tf.random_uniform((5, height, width, 3), seed=1, name='images')
+      num_elem_initial = tf.reduce_mean(tf.to_float(images > 0))
+      output = tf.contrib.layers.dropout(images, is_training=False)
+      num_elem = tf.reduce_mean(tf.to_float(output > 0))
+      sess.run(tf.initialize_all_variables())
+      num_elem, num_elem_initial = sess.run([num_elem, num_elem_initial])
+      self.assertEquals(num_elem, num_elem_initial)
+      outputs, inputs = sess.run([output, images])
+      self.assertAllClose(outputs, inputs)
+
+  def testCreateFCFollowByDropout(self):
+    height, width = 3, 3
+    with self.test_session() as sess:
+      images = tf.random_uniform((5, height, width, 3), seed=1, name='images')
+      output = tf.contrib.layers.fully_connected(images, 50)
+      num_elem_initial = tf.reduce_mean(tf.to_float(output > 0))
+      output = tf.contrib.layers.dropout(output)
+      num_elem = tf.reduce_mean(tf.to_float(output > 0))
+      sess.run(tf.initialize_all_variables())
+      num_elem, num_elem_initial = sess.run([num_elem, num_elem_initial])
+      self.assertLess(num_elem, num_elem_initial/2 + 0.1)
+      self.assertGreater(num_elem, num_elem_initial/2 - 0.1)
+
+  def testCreateFCWithDropout(self):
+    height, width = 3, 3
+    with self.test_session() as sess:
+      images = tf.random_uniform((5, height, width, 3), seed=1, name='images')
+      output = tf.contrib.layers.fully_connected(
+          images, 50, normalizer_fn=tf.contrib.layers.dropout)
+      num_elem = tf.reduce_mean(tf.to_float(output > 0))
+      sess.run(tf.initialize_all_variables())
+      num_elem = sess.run(num_elem)
+      self.assertLess(num_elem, 0.5)
+      self.assertGreater(num_elem, 0.1)
+
+
+class FlattenTest(tf.test.TestCase):
+
+  def testCollectOutputs(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.flatten(images, outputs_collections='outputs')
+      self.assertEquals(('Flatten', output),
+                        tf.get_collection('outputs')[0])
+
+  def testFlatten4D(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1, name='images')
+      output = tf.contrib.layers.flatten(images)
+      self.assertEquals(output.get_shape().num_elements(),
+                        images.get_shape().num_elements())
+      self.assertEqual(output.get_shape()[0], images.get_shape()[0])
+
+  def testFlatten3D(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width), seed=1, name='images')
+      output = tf.contrib.layers.flatten(images)
+      self.assertEquals(output.get_shape().num_elements(),
+                        images.get_shape().num_elements())
+      self.assertEqual(output.get_shape()[0], images.get_shape()[0])
+
+  def testFlattenBatchSize(self):
+    height, width = 3, 3
+    with self.test_session() as sess:
+      images = tf.random_uniform((5, height, width, 3), seed=1, name='images')
+      inputs = tf.placeholder(tf.int32, (None, height, width, 3))
+      output = tf.contrib.layers.flatten(inputs)
+      self.assertEquals(output.get_shape().as_list(),
+                        [None, height * width * 3])
+      output = sess.run(output, {inputs: images.eval()})
+      self.assertEquals(output.size,
+                        images.get_shape().num_elements())
+      self.assertEqual(output.shape[0], images.get_shape()[0])
+
+
 class FCTest(tf.test.TestCase):
 
   def testCreateFC(self):
     height, width = 3, 3
-    with self.test_session():
-      inputs = tf.random_uniform((5, height * width * 3), seed=1)
-      output = tf.contrib.layers.fully_connected(inputs, 32)
-      self.assertEquals(output.op.name, 'FC/Relu')
-      self.assertListEqual(output.get_shape().as_list(), [5, 32])
-      weights = tf.contrib.framework.get_variables_by_name('weights')[0]
-      self.assertListEqual(weights.get_shape().as_list(), [3 * 3 * 3, 32])
-      biases = tf.contrib.framework.get_variables_by_name('biases')[0]
-      self.assertListEqual(biases.get_shape().as_list(), [32])
+    for layer_fn in (tf.contrib.layers.fully_connected, tf.contrib.layers.relu):
+      with tf.Graph().as_default() as g, self.test_session(g):
+        inputs = tf.random_uniform((5, height * width * 3), seed=1)
+        output = layer_fn(inputs, 32)
+        self.assertEquals(output.op.name, 'fully_connected/Relu')
+        self.assertListEqual(output.get_shape().as_list(), [5, 32])
+        weights = tf.contrib.framework.get_variables_by_name('weights')[0]
+        self.assertListEqual(weights.get_shape().as_list(), [3 * 3 * 3, 32])
+        biases = tf.contrib.framework.get_variables_by_name('biases')[0]
+        self.assertListEqual(biases.get_shape().as_list(), [32])
 
   def testCreateFCWithScope(self):
     height, width = 3, 3
@@ -307,16 +495,18 @@ class FCTest(tf.test.TestCase):
     inputs = tf.random_uniform((5, height * width * 3), seed=1)
     with self.test_session():
       tf.contrib.layers.fully_connected(inputs, 32)
-      self.assertEquals(len(tf.contrib.framework.get_variables('FC')), 2)
+      self.assertEquals(
+          len(tf.contrib.framework.get_variables('fully_connected')), 2)
       tf.contrib.layers.fully_connected(inputs, 32)
-      self.assertEquals(len(tf.contrib.framework.get_variables('FC')), 4)
+      self.assertEquals(
+          len(tf.contrib.framework.get_variables('fully_connected')), 4)
 
   def testCreateFCWithoutActivation(self):
     height, width = 3, 3
     with self.test_session():
       inputs = tf.random_uniform((5, height * width * 3), seed=1)
       output = tf.contrib.layers.fully_connected(inputs, 32, activation_fn=None)
-      self.assertEquals(output.op.name, 'FC/BiasAdd')
+      self.assertEquals(output.op.name, 'fully_connected/BiasAdd')
 
   def testCreateFCWithWD(self):
     height, width = 3, 3
@@ -327,9 +517,9 @@ class FCTest(tf.test.TestCase):
                                         weights_regularizer=weight_decay)
       wd = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)[0]
       self.assertEquals(wd.op.name,
-                        'FC/weights/Regularizer/l2_regularizer')
+                        'fully_connected/weights/Regularizer/l2_regularizer')
       sess.run(tf.initialize_all_variables())
-      self.assertLess(sess.run(wd), 0.2)
+      self.assertLess(sess.run(wd), 0.4)
 
   def testCreateNoRegularizers(self):
     height, width = 3, 3
@@ -346,13 +536,13 @@ class FCTest(tf.test.TestCase):
       weight_decay = tf.contrib.layers.l2_regularizer(0.01)
       tf.contrib.layers.fully_connected(inputs, 32,
                                         weights_regularizer=weight_decay,
-                                        scope='fc')
+                                        scope='FC')
       self.assertEquals(len(tf.contrib.framework.get_variables()), 2)
       self.assertEquals(
           len(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)), 1)
       tf.contrib.layers.fully_connected(inputs, 32,
                                         weights_regularizer=weight_decay,
-                                        scope='fc',
+                                        scope='FC',
                                         reuse=True)
       self.assertEquals(len(tf.contrib.framework.get_variables()), 2)
       self.assertEquals(
@@ -369,10 +559,10 @@ class FCTest(tf.test.TestCase):
         net = tf.contrib.layers.fully_connected(images, 27)
         net = tf.contrib.layers.fully_connected(net, 27)
       self.assertEquals(len(tf.contrib.framework.get_variables()), 8)
-      self.assertEquals(
-          len(tf.contrib.framework.get_variables('FC/BatchNorm')), 3)
-      self.assertEquals(
-          len(tf.contrib.framework.get_variables('FC_1/BatchNorm')), 3)
+      self.assertEquals(len(tf.contrib.framework.get_variables(
+          'fully_connected/BatchNorm')), 3)
+      self.assertEquals(len(tf.contrib.framework.get_variables(
+          'fully_connected_1/BatchNorm')), 3)
 
   def testReuseFCWithBatchNorm(self):
     height, width = 3, 3
@@ -430,8 +620,8 @@ class BatchNormTest(tf.test.TestCase):
     height, width = 3, 3
     with self.test_session():
       images = tf.random_uniform((5, height, width, 3), seed=1)
-      tf.contrib.layers.batch_norm(images, updates_collection='update_ops')
-      update_layers = tf.get_collection('update_ops')
+      tf.contrib.layers.batch_norm(images, updates_collections='my_update_ops')
+      update_layers = tf.get_collection('my_update_ops')
       update_moving_mean = update_layers[0]
       update_moving_variance = update_layers[1]
       self.assertEquals(update_moving_mean.op.name,
@@ -460,7 +650,7 @@ class BatchNormTest(tf.test.TestCase):
     with self.test_session():
       images = tf.random_uniform((5, height, width, 3), seed=1)
       with tf.contrib.framework.arg_scope([tf.contrib.layers.batch_norm],
-                                          updates_collection='update_ops'):
+                                          updates_collections='update_ops'):
         tf.contrib.layers.batch_norm(images, scope='bn')
         self.assertEquals(len(tf.get_collection('update_ops')), 2)
         tf.contrib.layers.batch_norm(images, scope='bn', reuse=True)
@@ -479,7 +669,7 @@ class BatchNormTest(tf.test.TestCase):
       self.assertEquals(len(moving_variance), 1)
       self.assertEquals(moving_variance[0].op.name, 'BatchNorm/moving_variance')
 
-  def testUpdateMovingVars(self):
+  def testForceUpdateMovingVars(self):
     height, width = 3, 3
     with self.test_session() as sess:
       image_shape = (10, height, width, 3)
@@ -487,7 +677,8 @@ class BatchNormTest(tf.test.TestCase):
       expected_mean = np.mean(image_values, axis=(0, 1, 2))
       expected_var = np.var(image_values, axis=(0, 1, 2))
       images = tf.constant(image_values, shape=image_shape, dtype=tf.float32)
-      output = tf.contrib.layers.batch_norm(images, decay=0.1)
+      output = tf.contrib.layers.batch_norm(images, decay=0.1,
+                                            updates_collections=None)
       # Initialize all variables
       sess.run(tf.initialize_all_variables())
       moving_mean = tf.contrib.framework.get_variables(
@@ -515,9 +706,8 @@ class BatchNormTest(tf.test.TestCase):
       expected_mean = np.mean(image_values, axis=(0, 1, 2))
       expected_var = np.var(image_values, axis=(0, 1, 2))
       images = tf.constant(image_values, shape=image_shape, dtype=tf.float32)
-      output = tf.contrib.layers.batch_norm(images, decay=0.1,
-                                            updates_collection='update_ops')
-      update_ops = tf.get_collection('update_ops')
+      output = tf.contrib.layers.batch_norm(images, decay=0.1)
+      update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
       with tf.control_dependencies(update_ops):
         barrier = tf.no_op(name='barrier')
       output = control_flow_ops.with_dependencies([barrier], output)
@@ -550,10 +740,9 @@ class BatchNormTest(tf.test.TestCase):
       images = tf.constant(image_values, shape=image_shape, dtype=tf.float32)
       output = tf.contrib.layers.batch_norm(images,
                                             decay=0.1,
-                                            is_training=False,
-                                            updates_collection='update_ops')
-      update_layers = tf.get_collection('update_ops')
-      self.assertEquals(update_layers, [])
+                                            is_training=False)
+      update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+      self.assertEquals(update_ops, [])
       # Initialize all variables
       sess.run(tf.initialize_all_variables())
       moving_mean = tf.contrib.framework.get_variables(
@@ -587,10 +776,9 @@ class BatchNormTest(tf.test.TestCase):
       images = tf.constant(image_values, shape=image_shape, dtype=tf.float32)
       output = tf.contrib.layers.batch_norm(images,
                                             decay=0.1,
-                                            is_training=False,
-                                            updates_collection='update_ops')
-      update_layers = tf.get_collection('update_ops')
-      self.assertEquals(update_layers, [])
+                                            is_training=False)
+      update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+      self.assertEquals(update_ops, [])
       # Initialize all variables
       sess.run(tf.initialize_all_variables())
       moving_mean = tf.contrib.framework.get_variables(
@@ -613,6 +801,138 @@ class BatchNormTest(tf.test.TestCase):
       # shouldn't change.
       self.assertAllClose(mean, expected_mean)
       self.assertAllClose(variance, expected_var)
+
+
+class MaxPool2DTest(tf.test.TestCase):
+
+  def testCreateMaxPool(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.max_pool2d(images, [3, 3])
+      self.assertEquals(output.op.name, 'MaxPool2D/MaxPool')
+      self.assertListEqual(output.get_shape().as_list(), [5, 1, 1, 3])
+
+  def testCollectOutputs(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.max_pool2d(images, [3, 3],
+                                            outputs_collections='outputs')
+      self.assertEquals(('MaxPool2D', output),
+                        tf.get_collection('outputs')[0])
+
+  def testCreateSquareMaxPool(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.max_pool2d(images, 3)
+      self.assertEquals(output.op.name, 'MaxPool2D/MaxPool')
+      self.assertListEqual(output.get_shape().as_list(), [5, 1, 1, 3])
+
+  def testCreateMaxPoolWithScope(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.max_pool2d(images, [3, 3], scope='pool1')
+      self.assertEquals(output.op.name, 'pool1/MaxPool')
+
+  def testCreateMaxPoolSAME(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.max_pool2d(images, [3, 3], padding='SAME')
+      self.assertListEqual(output.get_shape().as_list(), [5, 2, 2, 3])
+
+  def testCreateMaxPoolStrideSAME(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.max_pool2d(images, [3, 3], stride=1,
+                                            padding='SAME')
+      self.assertListEqual(output.get_shape().as_list(), [5, height, width, 3])
+
+  def testGlobalMaxPool(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1)
+      output = tf.contrib.layers.max_pool2d(images, images.get_shape()[1:3],
+                                            stride=1)
+      self.assertListEqual(output.get_shape().as_list(), [5, 1, 1, 3])
+
+
+class OneHotEncodingTest(tf.test.TestCase):
+
+  def testOneHotEncodingCreate(self):
+    with self.test_session():
+      labels = tf.constant([0, 1, 2])
+      output = tf.contrib.layers.one_hot_encoding(labels, num_classes=3)
+      self.assertEquals(output.op.name, 'OneHotEncoding/one_hot')
+      self.assertListEqual(output.get_shape().as_list(), [3, 3])
+
+  def testCollectOutputs(self):
+    with self.test_session():
+      labels = tf.constant([0, 1, 2])
+      output = tf.contrib.layers.one_hot_encoding(labels, num_classes=3,
+                                                  outputs_collections='outputs')
+      self.assertEquals(('OneHotEncoding', output),
+                        tf.get_collection('outputs')[0])
+
+  def testOneHotEncoding(self):
+    with self.test_session():
+      labels = tf.constant([0, 1, 2])
+      one_hot_labels = tf.constant([[1, 0, 0],
+                                    [0, 1, 0],
+                                    [0, 0, 1]])
+      output = tf.contrib.layers.one_hot_encoding(labels, num_classes=3)
+      self.assertAllClose(output.eval(), one_hot_labels.eval())
+
+  def testOneHotEncodingInt32(self):
+    with self.test_session():
+      labels = tf.constant([0, 1, 2], dtype=tf.int32)
+      one_hot_labels = tf.constant([[1, 0, 0],
+                                    [0, 1, 0],
+                                    [0, 0, 1]])
+      output = tf.contrib.layers.one_hot_encoding(labels, num_classes=3)
+      self.assertAllClose(output.eval(), one_hot_labels.eval())
+
+
+class StackTests(tf.test.TestCase):
+
+  def testStackFullyConnected(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height * width * 3), seed=1, name='images')
+      output = tf.contrib.layers.stack(images,
+                                       tf.contrib.layers.fully_connected,
+                                       [10, 20, 30])
+      self.assertEquals(output.op.name, 'Stack/fully_connected_3/Relu')
+      self.assertListEqual(output.get_shape().as_list(), [5, 30])
+
+  def testStackConvolution2d(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1, name='images')
+      output = tf.contrib.layers.stack(images,
+                                       tf.contrib.layers.convolution2d,
+                                       [10, 20, 30],
+                                       kernel_size=[3, 3],
+                                       padding='SAME')
+      self.assertEquals(output.op.name, 'Stack/convolution2d_3/Relu')
+      self.assertListEqual(output.get_shape().as_list(), [5, 3, 3, 30])
+
+  def testStackWithScope(self):
+    height, width = 3, 3
+    with self.test_session():
+      images = tf.random_uniform((5, height, width, 3), seed=1, name='images')
+      output = tf.contrib.layers.stack(images,
+                                       tf.contrib.layers.convolution2d,
+                                       [10, 20, 30],
+                                       kernel_size=[3, 3],
+                                       padding='SAME',
+                                       scope='conv1')
+      self.assertEquals(output.op.name, 'conv1/conv1_3/Relu')
+      self.assertListEqual(output.get_shape().as_list(), [5, 3, 3, 30])
 
 
 # TODO(b/28426988): Add separate tests for non-legacy versions.
@@ -678,27 +998,6 @@ class LegacyFullyConnectedTest(tf.test.TestCase):
     self.assertEqual(output.get_shape().as_list(), [2, 8])
     self.assertTrue(np.all(out_value >= 0),
                     'Relu should have all values >= 0.')
-
-    self.assertEqual(2,
-                     len(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)))
-    self.assertEqual(0,
-                     len(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)))
-
-  def test_relu6_layer_basic_use(self):
-    output = tf.contrib.layers.legacy_relu6(self.input, 8)
-
-    with tf.Session() as sess:
-      with self.assertRaises(tf.errors.FailedPreconditionError):
-        sess.run(output)
-
-      tf.initialize_all_variables().run()
-      out_value = sess.run(output)
-
-    self.assertEqual(output.get_shape().as_list(), [2, 8])
-    self.assertTrue(np.all(out_value >= 0),
-                    'Relu6 should have all values >= 0.')
-    self.assertTrue(np.all(out_value <= 6),
-                    'Relu6 should have all values <= 6.')
 
     self.assertEqual(2,
                      len(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)))
@@ -905,132 +1204,6 @@ class LegacyFullyConnectedTest(tf.test.TestCase):
         tf.contrib.layers.legacy_fully_connected(x,
                                                  2,
                                                  activation_fn=tf.nn.softmax)
-
-
-class LegacyConvolution2dTest(tf.test.TestCase):
-
-  def setUp(self):
-    tf.test.TestCase.setUp(self)
-    tf.set_random_seed(1234)
-    self.input = tf.constant(np.arange(2 * 3 * 3 * 4).reshape(
-        [2, 3, 3, 4]).astype(np.float32))
-    assert not tf.get_collection(tf.GraphKeys.SUMMARIES)
-
-  def test_basic_use(self):
-    output = tf.contrib.layers.legacy_convolution2d(self.input,
-                                                    8, (3, 3),
-                                                    activation_fn=tf.nn.relu)
-
-    with tf.Session() as sess:
-      with self.assertRaises(tf.errors.FailedPreconditionError):
-        sess.run(output)
-
-      tf.initialize_all_variables().run()
-      out_value = sess.run(output)
-
-    self.assertEqual(output.get_shape().as_list(), [2, 3, 3, 8])
-    self.assertTrue(np.all(out_value >= 0),
-                    'Relu should have capped all values.')
-    self.assertEqual(2,
-                     len(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)))
-    self.assertEqual(0,
-                     len(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)))
-
-  def test_variable_reuse_with_scope(self):
-    with tf.variable_scope('test') as vs:
-      output1 = tf.contrib.layers.legacy_convolution2d(self.input,
-                                                       8, (3, 3),
-                                                       activation_fn=tf.nn.relu)
-      output2 = tf.contrib.layers.legacy_convolution2d(self.input,
-                                                       8, (3, 3),
-                                                       activation_fn=tf.nn.relu)
-
-    with tf.variable_scope(vs, reuse=True):
-      output3 = tf.contrib.layers.legacy_convolution2d(self.input,
-                                                       8, (3, 3),
-                                                       activation_fn=tf.nn.relu)
-
-    with tf.Session() as sess:
-      tf.initialize_all_variables().run()
-      out_value1, out_value2, out_value3 = sess.run([output1, output2, output3])
-
-    self.assertFalse(np.allclose(out_value1, out_value2))
-    self.assertAllClose(out_value1, out_value3)
-
-  def test_variable_reuse_with_template(self):
-    tmpl1 = tf.make_template('test',
-                             tf.contrib.layers.legacy_convolution2d,
-                             kernel_size=(3, 3),
-                             num_output_channels=8)
-    output1 = tmpl1(self.input)
-    output2 = tmpl1(self.input)
-
-    with tf.Session() as sess:
-      tf.initialize_all_variables().run()
-      out_value1, out_value2 = sess.run([output1, output2])
-    self.assertAllClose(out_value1, out_value2)
-
-  def test_custom_initializers(self):
-    output = tf.contrib.layers.legacy_convolution2d(
-        self.input,
-        2, (3, 3),
-        activation_fn=tf.nn.relu,
-        weight_init=tf.constant_initializer(2.0),
-        bias_init=tf.constant_initializer(1.0),
-        padding='VALID')
-
-    with tf.Session() as sess:
-      tf.initialize_all_variables().run()
-      out_value = sess.run(output)
-
-    self.assertAllClose(
-        np.array([[[[1261., 1261.]]], [[[3853., 3853.]]]]), out_value)
-
-  def test_custom_collections(self):
-    tf.contrib.layers.legacy_convolution2d(self.input,
-                                           2, (3, 3),
-                                           activation_fn=tf.nn.relu,
-                                           weight_collections=['unbiased'],
-                                           bias_collections=['biased'])
-
-    self.assertEquals(1, len(tf.get_collection('unbiased')))
-    self.assertEquals(1, len(tf.get_collection('biased')))
-
-  def test_all_custom_collections(self):
-    tf.contrib.layers.legacy_convolution2d(
-        self.input,
-        2, (3, 3),
-        activation_fn=tf.nn.relu,
-        weight_collections=['unbiased', 'all'],
-        bias_collections=['biased', 'all'])
-
-    self.assertEquals(1, len(tf.get_collection('unbiased')))
-    self.assertEquals(1, len(tf.get_collection('biased')))
-    self.assertEquals(2, len(tf.get_collection('all')))
-    self.assertEquals(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES),
-                      tf.get_collection('all'))
-
-  def test_regularizer(self):
-    cnt = [0]
-    tensor = tf.constant(5.0)
-    def test_fn(_):
-      cnt[0] += 1
-      return tensor
-
-    tf.contrib.layers.legacy_convolution2d(self.input,
-                                           2, (3, 3),
-                                           weight_regularizer=test_fn)
-
-    self.assertEqual([tensor],
-                     tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-    self.assertEqual(1, cnt[0])
-
-  def test_no_bias(self):
-    tf.contrib.layers.legacy_convolution2d(self.input,
-                                           2, (3, 3),
-                                           bias_init=None)
-    self.assertEqual(1,
-                     len(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)))
 
 
 if __name__ == '__main__':

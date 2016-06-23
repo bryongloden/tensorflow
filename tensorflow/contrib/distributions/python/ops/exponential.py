@@ -1,4 +1,4 @@
-# Copyright 2016 Google Inc. All Rights Reserved.
+# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,6 +70,7 @@ class Exponential(gamma.Gamma):
     """
     broadcast_shape = self._lam.get_shape()
     with ops.op_scope([self.lam, n], name, "ExponentialSample"):
+      n = ops.convert_to_tensor(n, name="n")
       shape = array_ops.concat(
           0, [array_ops.pack([n]), array_ops.shape(self._lam)])
       sampled = random_ops.random_uniform(

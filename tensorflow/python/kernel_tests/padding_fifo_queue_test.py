@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1269,7 +1269,7 @@ class PaddingFIFOQueueTest(tf.test.TestCase):
         np_array = np.random.randint(-10, 10, shape)
         if dtype == tf.bool:
           np_array = np_array > 0
-        elif dtype == tf.complex64:
+        elif dtype in (tf.complex64, tf.complex128):
           np_array = np.sqrt(np_array.astype(np_dtype))
         else:
           np_array = np_array.astype(np_dtype)

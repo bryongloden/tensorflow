@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -90,6 +90,12 @@ class FIFOQueueTest(tf.test.TestCase):
       enqueue_op = q.enqueue((10.0,))
       enqueue_op.run()
 
+  def testEnqueueHalf(self):
+    with self.test_session():
+      q = tf.FIFOQueue(10, tf.float16)
+      enqueue_op = q.enqueue((10.0,))
+      enqueue_op.run()
+
   def testEnqueueWithShape(self):
     with self.test_session():
       q = tf.FIFOQueue(10, tf.float32, shapes=(3, 2))
@@ -163,6 +169,20 @@ class FIFOQueueTest(tf.test.TestCase):
   def testDequeue(self):
     with self.test_session():
       q = tf.FIFOQueue(10, tf.float32)
+      elems = [10.0, 20.0, 30.0]
+      enqueue_ops = [q.enqueue((x,)) for x in elems]
+      dequeued_t = q.dequeue()
+
+      for enqueue_op in enqueue_ops:
+        enqueue_op.run()
+
+      for i in xrange(len(elems)):
+        vals = dequeued_t.eval()
+        self.assertEqual([elems[i]], vals)
+
+  def testDequeueHalf(self):
+    with self.test_session():
+      q = tf.FIFOQueue(10, tf.float16)
       elems = [10.0, 20.0, 30.0]
       enqueue_ops = [q.enqueue((x,)) for x in elems]
       dequeued_t = q.dequeue()
@@ -1132,7 +1152,7 @@ class FIFOQueueTest(tf.test.TestCase):
   def testDtypes(self):
     with self.test_session() as sess:
       dtypes = [tf.float32, tf.float64, tf.int32, tf.uint8, tf.int16, tf.int8,
-                tf.int64, tf.bool, tf.complex64]
+                tf.int64, tf.bool, tf.complex64, tf.complex128]
       shape = (32, 4, 128)
       q = tf.FIFOQueue(32, dtypes, [shape[1:]] * len(dtypes))
 
@@ -1142,7 +1162,7 @@ class FIFOQueueTest(tf.test.TestCase):
         np_array = np.random.randint(-10, 10, shape)
         if dtype == tf.bool:
           np_array = np_array > 0
-        elif dtype == tf.complex64:
+        elif dtype in (tf.complex64, tf.complex128):
           np_array = np.sqrt(np_array.astype(np_dtype))
         else:
           np_array = np_array.astype(np_dtype)
